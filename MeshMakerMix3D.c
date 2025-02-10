@@ -6,6 +6,7 @@
 # include <unistd.h> // Para função unlink()
 # include "hdf5.h"
 
+
 const char *estruturas[] =            {"Meshes","Coordinates","Elements","Results"}; // array de ponteiros, em que cada ponteiro aponta para uma string diferente no array
 const char *atributosMeshes[] =       {"Color", "Dimension", "ElemType","Name","Nnode"};
 const char *atributosResults[] =      {"Analysis","Component 1","Component 2", "Component 3","Name", "NumComponents","ResultLocation","ResultType","Step"};             
@@ -34,21 +35,110 @@ void remove_arquivo(const char *nome_arquivo)
     }
 }
 
+void criarArquivoXDMF(int elements_Paraview_Quad_XDMF[][4], int elements_Paraview_Tri_XDMF[][3], int numElements,int numElementsTri,int numElementsQuad, const char elemType[], int numNodes, const char completePath[]) 
+{
+    const char *filename = "mesh.xdmf";
+    FILE *arquivo = fopen(filename,"w");
+
+    int nodesPerElement;
+    
+    if ((strcmp(elemType,"Quadrilateral")==0) || (strcmp(elemType,"Triangle")==0))
+    {
+        if (strcmp(elemType,"Quadrilateral")==0) {nodesPerElement = 4;}
+        else {nodesPerElement = 3;}
+        fprintf(arquivo,"<?xml version=\"1.0\"?>\n");
+        fprintf(arquivo,"<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>\n");
+        fprintf(arquivo,"<Xdmf Version=\"3.0\" xmlns:xi=\"http://www.w3.org/2001/XInclude\">\n");
+        fprintf(arquivo,"  <Domain>\n");
+        fprintf(arquivo,"    <Grid Name=\"TimeSeries\" GridType=\"Collection\" CollectionType=\"Temporal\">\n");
+        fprintf(arquivo,"      <Grid Name=\"mesh\" GridType=\"Uniform\">\n");
+        fprintf(arquivo,"        <Geometry GeometryType=\"X_Y_Z\">\n");
+        fprintf(arquivo,"          <DataItem Dimensions=\"%d 1\" Format=\"HDF\">%s:/Meshes/1/Coordinates/2</DataItem>\n",numNodes,completePath); //1 -> adicionar 2 para mix
+        fprintf(arquivo,"          <DataItem Dimensions=\"%d 1\" Format=\"HDF\">%s:/Meshes/1/Coordinates/3</DataItem>\n",numNodes,completePath);
+        fprintf(arquivo,"          <DataItem Dimensions=\"%d 1\" Format=\"HDF\">%s:/Meshes/1/Coordinates/4</DataItem>\n",numNodes,completePath);
+                                    // adicionar linhas caso mix 
+        fprintf(arquivo,"        </Geometry>\n");
+        fprintf(arquivo,"        <Topology NumberOfElements=\"%d\" TopologyType=\"%s\" NodesPerElement=\"%d\">\n", numElements,elemType, nodesPerElement);
+        fprintf(arquivo,"          <DataItem Dimensions=\"%d %d\" NumberType=\"UInt\" Format=\"HDF\">%s:/Meshes/1/Elements/IncidParaview</DataItem>\n",numElements,nodesPerElement,completePath);
+        fprintf(arquivo,"        </Topology>\n");
+        fprintf(arquivo,"        <Time Value=\"1.000000e+00\" />\n");
+        fprintf(arquivo,"        <Attribute Name=\"Displacement\" AttributeType=\"Vector\" Center=\"Node\">\n");
+        fprintf(arquivo,"          <DataItem Dimensions=\"3 %d\" Format=\"HDF\">%s:/Results/1/ResultParaview</DataItem>\n",numNodes,completePath);
+        fprintf(arquivo,"        </Attribute>\n");
+        fprintf(arquivo,"      </Grid>\n");
+        fprintf(arquivo,"    </Grid>\n");
+        fprintf(arquivo,"  </Domain>\n");
+        fprintf(arquivo,"</Xdmf>");
+        fclose(arquivo); 
+    }
+
+    else if (strcmp(elemType,"Mix")==0)
+    {
+        fprintf(arquivo,"<?xml version=\"1.0\"?>\n");
+        fprintf(arquivo,"<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>\n");
+        fprintf(arquivo,"<Xdmf Version=\"3.0\" xmlns:xi=\"http://www.w3.org/2001/XInclude\">\n");
+        fprintf(arquivo,"  <Domain>\n");
+        fprintf(arquivo,"    <Grid Name=\"TimeSeries\" GridType=\"Collection\" CollectionType=\"Temporal\">\n");
+
+        // Grid para a malha 1 
+        fprintf(arquivo,"      <Grid Name=\"Mesh\" GridType=\"Uniform\">\n");
+
+        fprintf(arquivo,"        <Geometry GeometryType=\"X_Y_Z\">\n");
+        fprintf(arquivo,"          <DataItem Dimensions=\"%d 1\" Format=\"HDF\">%s:/Meshes/1/Coordinates/2</DataItem>\n",numNodes,completePath); 
+        fprintf(arquivo,"          <DataItem Dimensions=\"%d 1\" Format=\"HDF\">%s:/Meshes/1/Coordinates/3</DataItem>\n",numNodes,completePath);
+        fprintf(arquivo,"          <DataItem Dimensions=\"%d 1\" Format=\"HDF\">%s:/Meshes/1/Coordinates/4</DataItem>\n",numNodes,completePath);
+        fprintf(arquivo,"        </Geometry>\n");
+
+        fprintf(arquivo,"        <Topology NumberOfElements=\"%d\" TopologyType=\"Mixed\">\n", numElements);
+        fprintf(arquivo,"          <DataItem Format=\"XML\" DataType=\"Int\" Dimensions=\"36\">\n");
+        if (numElementsQuad != 0)
+        {
+            for (int i = 0; i < numElementsQuad; i++)
+            {
+                fprintf(arquivo,"               5 %d %d %d %d\n",elements_Paraview_Quad_XDMF[i][0],elements_Paraview_Quad_XDMF[i][1],elements_Paraview_Quad_XDMF[i][2],elements_Paraview_Quad_XDMF[i][3]);  // Quadrado
+            }
+        }
+        if (numElementsTri != 0)
+        {
+            for (int i = 0; i < numElementsTri; i++)
+            {
+                fprintf(arquivo,"               4 %d %d %d\n",elements_Paraview_Tri_XDMF[i][0],elements_Paraview_Tri_XDMF[i][1],elements_Paraview_Tri_XDMF[i][2]);  // Triangulo
+            }
+        }
+        
+        fprintf(arquivo,"          </DataItem>\n");
+        fprintf(arquivo,"        </Topology>\n");
+
+        fprintf(arquivo,"        <Time Value=\"1.000000e+00\" />\n");
+
+        fprintf(arquivo,"        <Attribute Name=\"Displacement\" AttributeType=\"Vector\" Center=\"Node\">\n");
+        fprintf(arquivo,"          <DataItem Dimensions=\"3 %d\" Format=\"HDF\">%s:/Results/1/ResultParaview</DataItem>\n",numNodes,completePath);
+        fprintf(arquivo,"        </Attribute>\n");
+
+        fprintf(arquivo,"      </Grid>\n");
+
+        fprintf(arquivo,"    </Grid>\n");
+        fprintf(arquivo,"  </Domain>\n");
+        fprintf(arquivo,"</Xdmf>");
+        fclose(arquivo);
+    }
+
+}
+
 void distAtributos(const char *estruturas[], const char **atributos[],const char **valorAtributos[], int iteracoesTotais, int * tamanhos, double coords[4][8], int elements[6][8], int results[4][8]) 
 {   
     // Identificação dimensões
     int numColsCoords = (sizeof(coords[0])/sizeof(coords[0][0])); //    sizeof(coords[0]) = 9 * 8 bytes (double); sizeof(coords[0][0]) = 8 bytes (double)
-    
     int numColsElements = (sizeof(elements[0])/sizeof(elements[0][0])); 
-
     int numColsResults = (sizeof(results[0])/sizeof(results[0][0])); 
-
-    //printf("%d %d %d %d", numColsCoords,numColsElements,numColsElementsQ,numColsResults);
 
     // A padronização não aceita criar grupo com numeros como nome, então é preciso esse artifício
     char um[2] = "1"; 
     char dois[2] = "2";
-    char tres[2] = "3";
+
+    // Coleta de imformações sobre a malha e o arquivo
+    //const char **elemType[] = valorAtributos[0][2];
+    const char CompleteMeshPath[] = "C:/Users/arthu/Desktop/Codigos/mesh.h5";
 
     //////////////////////////////////////////////// Cria elementos quadrilateros e triangulares /////////////////////////////////////////////////////////////////
 
@@ -111,13 +201,42 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
     printf("\nCountQ:%d\n",countQ);
     printf("CountT:%d\n",countT);
 
-    // Criar datasets para paraview
+    //////////////////////////////////////////////// Cria datasets para Paraview /////////////////////////////////////////////////////////////////
+    
     int elements_Paraview[3][numColsElements];
     for (int i = 1; i<4; i++) {for (int j = 0; j<numColsElements;j++) {elements_Paraview[i-1][j] = elements[i][j]-1;}}
+
+    int elements_Paraview_Quad[4][countQ];
+    for (int i = 1; i<5; i++) {for (int j = 0; j<countQ;j++) {elements_Paraview_Quad[i-1][j] = elementsQuadri[i][j]-1;}}
+
+    int elements_Paraview_Tri[3][countT];
+    for (int i = 1; i<4; i++) {for (int j = 0; j<countT;j++) {elements_Paraview_Tri[i-1][j] = elementsTri[i][j]-1;}}
     
     int results_Paraview[numColsResults][3];
     for (int i = 1; i<4;i++) {for (int j = 0; j<numColsResults; j++) {results_Paraview[j][i-1] = results[i][j];}}
+
+    int elements_Paraview_Quad_XDMF[countQ][4], elements_Paraview_Tri_XDMF[countT][3];
+
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < countQ;j++)
+        {
+            elements_Paraview_Quad_XDMF[i][j] = elements_Paraview_Quad[j][i]; 
+        }
+    }
     
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < countT;j++)
+        {
+            elements_Paraview_Tri_XDMF[i][j] = elements_Paraview_Tri[j][i]; 
+        }
+    }
+
+
+
+    //////////////////////////////////////////////// Iniciação do arquivo hdf5 /////////////////////////////////////////////////////////////////
+
     char H5file_name[] = "mesh.h5"; // Nome do arquivo
     herr_t status;                  // variável de retorno das operações de criação, abertura e fechamento
 
@@ -125,7 +244,8 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
     hid_t H5file = H5Fcreate(H5file_name, H5F_ACC_TRUNC, H5P_DEFAULT,H5P_DEFAULT); // Criar arquivo HDF5
     if (H5file < 0) {fprintf(stderr, "Erro ao criar o arquivo HDF5.\n"); return;}
     
-    // Criar atributos do root "/"  
+    //////////////////////////////////////////////// Cria atributos para o root /////////////////////////////////////////////////////////////////
+ 
     hid_t GrootId = H5Gopen(H5file, "/", H5P_DEFAULT); // Obter id do grupo "/"
     const char *AttrNameRoot = "GiD Post Results File"; // Nome do atributo
     const char *AttrValueRoot = "1.1";                  // Valor do atributo    
@@ -139,7 +259,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
     H5Sclose(SpaceRootId);                                 // Fecha dataspace
     H5Tclose(StrRootType);                                 // Fecha datatype
 
-    // Criar grupos em uma estruturas padrão
+    //////////////////////////////////////////////// Criar grupos em uma estruturas padrão ////////////////////////////////////////////////
     
     hid_t H5Gmeshes = H5Gcreate(H5file, "/Meshes", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     if (H5Gmeshes < 0) {fprintf(stderr, "Erro ao criar o grupo /Meshes.\n");H5Gclose(H5Gmeshes);H5Fclose(H5file);return;}
@@ -147,6 +267,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
     hid_t H5Gresults = H5Gcreate(H5file, "/Results", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     if (H5Gresults < 0) {fprintf(stderr, "Erro ao criar o grupo /Results.\n");H5Gclose(H5Gresults); H5Fclose(H5file);return;}
     
+    //////////////////////////////////////////////// Atribuições da malha ////////////////////////////////////////////////////////////////
     for (int j = 0; j < iteracoesTotais; j++)
     {
         if(strcmp(estruturas[j],"Meshes")==0) 
@@ -230,6 +351,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
             }
             
         }
+    //////////////////////////////////////////////// Dataseets das coordenadas ////////////////////////////////////////////////
 
         else if(strcmp(estruturas[j],"Coordinates")==0)
         {   
@@ -303,6 +425,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
             }
             
         }
+    //////////////////////////////////////////////// Datasets dos elementos ////////////////////////////////////////////////
 
         else if(strcmp(estruturas[j],"Elements")==0)
         {   
@@ -328,7 +451,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
                 status = H5Dwrite(elements_dataset4, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsQuadri[3]);
                 status = H5Dwrite(elements_dataset5, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsQuadri[4]);
                 status = H5Dwrite(elements_dataset6, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsQuadri[5]);
-                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview);
+                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview_Quad);
                 
                 H5Tclose(elements_datatype);
                 H5Sclose(elements_dataspace);
@@ -362,7 +485,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
                 status = H5Dwrite(elements_dataset3, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsTri[2]);
                 status = H5Dwrite(elements_dataset4, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsTri[3]);
                 status = H5Dwrite(elements_dataset5, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsTri[5]);
-                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview);
+                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview_Tri);
                 
                 H5Tclose(elements_datatype);
                 H5Sclose(elements_dataspace);
@@ -399,7 +522,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
                 status = H5Dwrite(elements_dataset4, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsQuadri[3]);
                 status = H5Dwrite(elements_dataset5, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsQuadri[4]);
                 status = H5Dwrite(elements_dataset6, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsQuadri[5]);
-                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview);
+                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview_Quad);
                 
                 H5Tclose(elements_datatype);
                 H5Sclose(elements_dataspace);
@@ -430,7 +553,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
                 status = H5Dwrite(elements_dataset3, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsTri[2]);
                 status = H5Dwrite(elements_dataset4, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsTri[3]);
                 status = H5Dwrite(elements_dataset5, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, elementsTri[5]);
-                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview);
+                status = H5Dwrite(elements_dataset_IncidParaview, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,elements_Paraview_Tri);
                 
                 H5Tclose(elements_datatype);
                 H5Sclose(elements_dataspace);
@@ -450,7 +573,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
                 
         }
 
-        
+    //////////////////////////////////////////////// Datasets dos resultados ////////////////////////////////////////////////     
 
         else if(strcmp(estruturas[j],"Results")==0)
         {
@@ -506,10 +629,7 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
         }
     }
 
-    // Finaliza acesso ao arquivo
-    //status = H5Gclose(H5Gcoords);
-    //status = H5Gclose(H5Gelements);
-    //status = H5Gclose(H5Gmesh1);
+    //////////////////////////////////////////////// Finalização/Fechamentos dos grupos ////////////////////////////////////////////////
     
     if (strcmp(valorAtributos[0][2],"Mix")==0){status = H5Gclose(pointM1);status = H5Gclose(pointM2);}
     else{status = H5Gclose(pointM);}
@@ -517,7 +637,15 @@ void distAtributos(const char *estruturas[], const char **atributos[],const char
     status = H5Gclose(H5Gmeshes);
     status = H5Gclose(H5Gresults);
     status = H5Fclose(H5file); 
+
+    //////////////////////////////////////////////// Criação do arquivo XDMF de suporte para o Paraview ///////////////////////////////
+
+    criarArquivoXDMF(elements_Paraview_Quad_XDMF,elements_Paraview_Tri_XDMF,numColsElements, countT, countQ, valorAtributos[0][2], numColsCoords, CompleteMeshPath);
 }
+
+    //////////////////////////////////////////////// Função que cria o arquivo XDMF de suporte para o Paraview ///////////////////////
+
+
 
 int main() {
     
